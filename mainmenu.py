@@ -90,10 +90,12 @@ try:
     from signature.elgamal_signature import ElGamalSignature
     from signature.paillier_he import PaillierHE, PaillierPublicKey, PaillierPrivateKey
     from signature.shamir_sss import ShamirSecretSharing
+    from signature.elgamal_signature import ElGamalParams, ElGamalPrivateKey, ElGamalPublicKey
 except ImportError as e:
     print(f"Import error: {e}")  # For debugging
     RSASignature = DSA = ElGamalSignature = PaillierHE = ShamirSecretSharing = None
     PaillierPublicKey = PaillierPrivateKey = None
+    ElGamalParams = ElGamalPrivateKey = ElGamalPublicKey = None
 
 # Initialize Rich console
 console = Console()
@@ -1133,9 +1135,167 @@ def handle_dsa_signature():
 
 def handle_elgamal_signature():
     """Handle ElGamal digital signature creation and verification."""
+    clear_screen()
+    display_header()
     console.print(Panel("[bold]🔏 ElGamal Digital Signature[/bold]", border_style="magenta"))
-    # Placeholder for ElGamal signature logic
-    console.print("[yellow]ElGamal signature functionality not implemented in this template.[/yellow]")
+
+    if ElGamalSignature is None:
+        console.print("[bold red]ElGamal Signature module not available![/bold red]")
+        Prompt.ask("Press Enter to continue")
+        return
+
+    # Create ElGamal signature submenu
+    table = Table(title="ElGamal Signature Operations")
+    table.add_column("Option", style="cyan", no_wrap=True)
+    table.add_column("Description", style="green")
+    
+    table.add_row("1", "Generate New Key Pair")
+    table.add_row("2", "Sign a Message")
+    table.add_row("3", "Verify a Signature")
+    table.add_row("0", "Back")
+    
+    console.print(table)
+    
+    choice = Prompt.ask("Select an operation", choices=["0", "1", "2", "3"], default="0")
+
+    try:
+        if choice == "1":
+            # Generate new key pair
+            console.print("\n[bold]Generating ElGamal parameters (2048 bits)...[/bold]")
+            params = ElGamalSignature.generate_params(bits=2048)
+            console.print("[green]✓ Parameters generated[/green]")
+            
+            private_key, public_key = ElGamalSignature.generate_keypair(params)
+            console.print("[green]✓ Key pair generated[/green]")
+            
+            # Display public key information
+            console.print("\n[bold cyan]Public Key Information:[/bold cyan]")
+            console.print(f"[cyan]Modulus p:[/cyan] ...{str(params.p)[-20:]}")
+            console.print(f"[cyan]Generator g:[/cyan] {params.g}")
+            console.print(f"[cyan]Public value y:[/cyan] ...{str(public_key.y)[-20:]}")
+            save = Prompt.ask("Do you want to save these keys?", choices=["y", "n"], default="n")
+            if save == "y":
+                pub_path = Prompt.ask("Public key file path", default="elgamal_public.key")
+                priv_path = Prompt.ask("Private key file path", default="elgamal_private.key")
+                try:
+                    # Save public key
+                    with open(pub_path, 'w') as f:
+                        f.write(f"{params.p}\n{params.g}\n{public_key.y}")
+                    console.print(f"[green]Public key saved to {pub_path}[/green]")
+                    
+                    # Save private key
+                    with open(priv_path, 'w') as f:
+                        f.write(f"{params.p}\n{params.g}\n{private_key.x}")
+                    console.print(f"[green]Private key saved to {priv_path}[/green]")
+                except Exception as e:
+                    console.print(f"[bold red]Error saving keys: {e}[/bold red]")
+
+        elif choice == "2":
+            # Sign a message
+            input_type = Prompt.ask("Input type", choices=["text", "file"], default="text")
+            
+            if input_type == "text":
+                message = Prompt.ask("Enter the message to sign")
+                message_bytes = message.encode('utf-8')
+            else:
+                file_path = Prompt.ask("Enter input file path")
+                try:
+                    with open(file_path, 'rb') as f:
+                        message_bytes = f.read()
+                except Exception as e:
+                    console.print(f"[bold red]Error reading file: {e}[/bold red]")
+                    Prompt.ask("Press Enter to continue")
+                    return
+              # Load private key for signing
+            priv_path = Prompt.ask("Enter private key file path")
+            try:
+                with open(priv_path, 'r') as f:
+                    p = int(f.readline().strip())
+                    g = int(f.readline().strip())
+                    x = int(f.readline().strip())
+                params = ElGamalParams(p=p, g=g)
+                private_key = ElGamalPrivateKey(params=params, x=x)
+                
+                # Create ElGamal signature object with private key
+                signer = ElGamalSignature(private_key)
+                console.print("[green]✓ Private key loaded successfully[/green]")
+            except Exception as e:
+                console.print(f"[bold red]Error loading private key: {e}[/bold red]")
+                Prompt.ask("Press Enter to continue")
+                return
+            
+            # Sign the message
+            signature = signer.sign(message_bytes)
+            
+            console.print("\n[bold green]✓ Signature generated successfully[/bold green]")
+            console.print(f"[cyan]Signature r:[/cyan] ...{str(signature[0])[-20:]}")
+            console.print(f"[cyan]Signature s:[/cyan] ...{str(signature[1])[-20:]}")
+            
+            # Save signature if requested
+            save = Prompt.ask("Do you want to save the signature?", choices=["y", "n"], default="n")
+            if save == "y":
+                output_path = Prompt.ask("Enter output file path", default="signature.txt")
+                try:
+                    with open(output_path, 'w') as f:
+                        f.write(f"{signature[0]}\n{signature[1]}")
+                    console.print(f"[green]Signature saved to {output_path}[/green]")
+                except Exception as e:
+                    console.print(f"[bold red]Error saving signature: {e}[/bold red]")
+
+        elif choice == "3":
+            # Verify a signature
+            input_type = Prompt.ask("Input type", choices=["text", "file"], default="text")
+            
+            if input_type == "text":
+                message = Prompt.ask("Enter the original message")
+                message_bytes = message.encode('utf-8')
+            else:
+                file_path = Prompt.ask("Enter message file path")
+                try:
+                    with open(file_path, 'rb') as f:
+                        message_bytes = f.read()
+                except Exception as e:
+                    console.print(f"[bold red]Error reading message file: {e}[/bold red]")
+                    Prompt.ask("Press Enter to continue")
+                    return
+            
+            # Get signature components
+            try:
+                r = int(Prompt.ask("Enter signature component r"))
+                s = int(Prompt.ask("Enter signature component s"))
+            except ValueError:
+                console.print("[bold red]Error: Signature components must be integers[/bold red]")
+                Prompt.ask("Press Enter to continue")
+                return
+              # Load public key for verification
+            pub_path = Prompt.ask("Enter public key file path")
+            try:
+                with open(pub_path, 'r') as f:
+                    p = int(f.readline().strip())
+                    g = int(f.readline().strip())
+                    y = int(f.readline().strip())
+                params = ElGamalParams(p=p, g=g)
+                public_key = ElGamalPublicKey(params=params, y=y)
+                
+                # Create ElGamal signature object with public key
+                verifier = ElGamalSignature(public_key)
+                console.print("[green]✓ Public key loaded successfully[/green]")
+            except Exception as e:
+                console.print(f"[bold red]Error loading public key: {e}[/bold red]")
+                Prompt.ask("Press Enter to continue")
+                return
+            
+            # Verify the signature
+            if verifier.verify(message_bytes, (r, s)):
+                console.print("\n[bold green]✓ Signature is valid![/bold green]")
+            else:
+                console.print("\n[bold red]✗ Signature is invalid![/bold red]")
+
+    except Exception as e:
+        console.print(f"[bold red]An error occurred: {e}[/bold red]")
+        import traceback
+        traceback.print_exc()
+
     Prompt.ask("Press Enter to continue")
 
 def handle_paillier_he():
