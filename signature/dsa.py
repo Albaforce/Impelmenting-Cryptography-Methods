@@ -186,3 +186,44 @@ if __name__ == '__main__':
     # This block allows running the example directly
     run_dsa_example()
 
+from Crypto.PublicKey import DSA
+from Crypto.Signature import DSS
+from Crypto.Hash import SHA256
+
+class DSA:
+    def __init__(self, key=None):
+        self.key = key
+
+    def sign(self, message):
+        if isinstance(message, str):
+            message = message.encode('utf-8')
+        
+        if not self.key.has_private():
+            raise ValueError("Private key required for signing")
+        
+        # Create hash of message
+        hash_obj = SHA256.new(message)
+        
+        # Create signer
+        signer = DSS.new(self.key, 'fips-186-3')
+        
+        # Sign the hash
+        signature = signer.sign(hash_obj)
+        return signature
+
+    def verify(self, message, signature):
+        if isinstance(message, str):
+            message = message.encode('utf-8')
+        
+        # Create hash of message
+        hash_obj = SHA256.new(message)
+        
+        # Create verifier
+        verifier = DSS.new(self.key, 'fips-186-3')
+        
+        try:
+            verifier.verify(hash_obj, signature)
+            return True
+        except ValueError:
+            return False
+

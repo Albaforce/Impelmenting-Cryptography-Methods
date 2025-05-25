@@ -38,4 +38,3 @@ derived_key_bob = HKDF(
 # 6. Verify both derived the same key
 assert derived_key_alice == derived_key_bob
 
-print("✅ Shared symmetric key (for AES or other crypto):", derived_key_alice.hex())

@@ -101,7 +101,12 @@ def ripemd160(message: bytes) -> str:
 
     # Return the final hash as a hex string
     return ''.join(f'{value:08x}' for value in h)
+def RIPEMD160(data):
+    """Wrapper to accept str or bytes and return RIPEMD-160 hex string."""
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return ripemd160(data)
 
 # Example usage
-ripemd_hash = ripemd160(b"hello world")
+ripemd_hash = RIPEMD160(b"hello world")
 print("RIPEMD-160 Hash of 'hello world':", ripemd_hash)

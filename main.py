@@ -8,7 +8,7 @@
 5. Paillier Homomorphic Encryption
 
 This is a fresh implementation attempt to resolve persistent syntax issues.
-Each section includes the algorithm implemeSntation and an example usage function.
+Each section includes the algorithm implementation and an example usage function.
 A main function at the end runs all examples.
 """
 

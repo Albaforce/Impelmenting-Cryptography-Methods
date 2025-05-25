@@ -1,3 +1,8 @@
+from rich.console import Console
+from rich.table import Table
+from rich.prompt import Prompt, Confirm
+from rich.panel import Panel
+
 # AES S-box
 Sbox = [
     # 0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
@@ -88,3 +93,52 @@ def aes_decrypt_block(block, key):
 # Example use
 decrypted = aes_decrypt_block(ciphertext, key)
 print("Decrypted:", decrypted)
+
+console = Console()
+
+def aes_menu():
+    while True:
+        console.clear()
+        console.print(Panel("[bold cyan]AES Demo Menu[/bold cyan]", border_style="magenta"))
+        table = Table(title="AES Operations")
+        table.add_column("Option", style="cyan", no_wrap=True)
+        table.add_column("Description", style="green")
+        table.add_row("1", "Encrypt a 16-byte block")
+        table.add_row("2", "Decrypt a 16-byte block")
+        table.add_row("0", "Exit")
+        console.print(table)
+        choice = Prompt.ask("Select an option", choices=["0", "1", "2"], default="0")
+        if choice == "0":
+            console.print("[bold blue]Exiting AES menu.[/bold blue]")
+            break
+        elif choice == "1":
+            plaintext = Prompt.ask("Enter 16-byte plaintext (ASCII)", default="example16bytes!!")
+            key = Prompt.ask("Enter 16-byte key (ASCII)", default="mysecretkey12345")
+            if len(plaintext) != 16 or len(key) != 16:
+                console.print("[bold red]Both plaintext and key must be exactly 16 bytes![/bold red]")
+                Prompt.ask("Press Enter to continue")
+                continue
+            ciphertext = aes_encrypt_block(plaintext.encode(), key.encode())
+            console.print(f"[bold green]Ciphertext (hex):[/bold green] {ciphertext.hex()}")
+            Prompt.ask("Press Enter to continue")
+        elif choice == "2":
+            ciphertext_hex = Prompt.ask("Enter ciphertext (hex)")
+            key = Prompt.ask("Enter 16-byte key (ASCII)", default="mysecretkey12345")
+            try:
+                ciphertext = bytes.fromhex(ciphertext_hex)
+                if len(ciphertext) != 16 or len(key) != 16:
+                    raise ValueError
+            except Exception:
+                console.print("[bold red]Invalid ciphertext or key length![/bold red]")
+                Prompt.ask("Press Enter to continue")
+                continue
+            decrypted = aes_decrypt_block(ciphertext, key.encode())
+            try:
+                decrypted_text = decrypted.decode()
+            except Exception:
+                decrypted_text = str(decrypted)
+            console.print(f"[bold green]Decrypted text:[/bold green] {decrypted_text}")
+            Prompt.ask("Press Enter to continue")
+
+if __name__ == "__main__":
+    aes_menu()

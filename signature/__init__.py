@@ -20,17 +20,7 @@ from .rsa_signature import (
     run_rsa_example
 )
 
-from .elgamal_signature import (
-    ElGamalParams,
-    ElGamalPrivateKey,
-    ElGamalPublicKey,
-    ElGamalSignature,
-    generate_elgamal_params,
-    generate_elgamal_keys,
-    sign_message_elgamal,
-    verify_signature_elgamal,
-    run_elgamal_example
-)
+from .elgamal_signature import ElGamalSignature
 
 from .dsa import (
     generate_dsa_keys,
@@ -39,58 +29,26 @@ from .dsa import (
     run_dsa_example
 )
 
-from .shamir_sss import (
-    generate_shares as generate_sss_shares,
-    reconstruct_secret as reconstruct_sss_secret,
-    get_sss_prime,
-    run_sss_example
-)
+from .shamir_sss import ShamirSecretSharing
 
-from .paillier_he import (
-    PaillierPublicKey,
-    PaillierPrivateKey,
-    generate_paillier_keys,
-    encrypt_paillier,
-    decrypt_paillier,
-    homomorphic_add as homomorphic_add_paillier,
-    homomorphic_multiply_const as homomorphic_multiply_const_paillier,
-    run_paillier_example
-)
+from .paillier_he import PaillierHE, PaillierPublicKey, PaillierPrivateKey
 
 __all__ = [
     # RSA
     'generate_rsa_keys',
     'sign_message_rsa',
     'verify_signature_rsa',
-    'run_rsa_example',
-    # ElGamal
-    'ElGamalParams',
-    'ElGamalPrivateKey',
-    'ElGamalPublicKey',
+    'run_rsa_example',    # ElGamal
     'ElGamalSignature',
-    'generate_elgamal_params',
-    'generate_elgamal_keys',
-    'sign_message_elgamal',
-    'verify_signature_elgamal',
-    'run_elgamal_example',
     # DSA
     'generate_dsa_keys',
     'sign_message_dsa',
     'verify_signature_dsa',
-    'run_dsa_example',
-    # Shamir SSS
-    'generate_sss_shares',
-    'reconstruct_sss_secret',
-    'get_sss_prime',
-    'run_sss_example',
+    'run_dsa_example',    # Shamir SSS
+    'ShamirSecretSharing',
     # Paillier HE
     'PaillierPublicKey',
     'PaillierPrivateKey',
-    'generate_paillier_keys',
-    'encrypt_paillier',
-    'decrypt_paillier',
-    'homomorphic_add_paillier',
-    'homomorphic_multiply_const_paillier',
-    'run_paillier_example',
+    'PaillierHE',
 ]
 

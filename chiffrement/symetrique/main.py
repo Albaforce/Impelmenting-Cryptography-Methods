@@ -786,41 +786,104 @@ def triple_des_decrypt(b64_text: str, key1: str, key2: str, key3: str) -> str:
         return des_decrypt(encrypted, key1)
 
 def desx_encrypt(text: str, key: str, key_pre: str, key_post: str) -> str:
-    """Chiffrement DESX."""
-    # XOR avec la première clé
-    pre_xor = ''.join(chr(ord(text[i]) ^ ord(key_pre[i % len(key_pre)])) for i in range(len(text)))
+    """Chiffrement DESX corrigé."""
+    # Étendre key_pre à la longueur du texte
+    extended_key_pre = (key_pre * (len(text) // len(key_pre) + 1))[:len(text)]
+    
+    # XOR avec la première clé (pré-blanchiment)
+    pre_xor = ''.join(chr(ord(text[i]) ^ ord(extended_key_pre[i])) for i in range(len(text)))
     
     # Chiffrer avec DES
     des_result = des_encrypt(pre_xor, key)
     
-    # Convertir le base64 en texte
+    # Convertir le base64 en bytes pour post-blanchiment
     des_bytes = base64.b64decode(des_result)
-    des_text = des_bytes.decode(errors='replace')
     
-    # XOR avec la troisième clé
-    post_xor = ''.join(chr(ord(des_text[i]) ^ ord(key_post[i % len(key_post)])) for i in range(len(des_text)))
+    # Étendre key_post à la longueur des bytes DES
+    extended_key_post = (key_post * (len(des_bytes) // len(key_post) + 1))[:len(des_bytes)]
+    
+    # XOR avec la troisième clé (post-blanchiment)
+    post_xor = bytes(des_bytes[i] ^ ord(extended_key_post[i % len(key_post)]) for i in range(len(des_bytes)))
     
     # Convertir en base64
-    return base64.b64encode(post_xor.encode()).decode()
+    return base64.b64encode(post_xor).decode()
 
 def desx_decrypt(b64_text: str, key: str, key_pre: str, key_post: str) -> str:
-    """Déchiffrement DESX."""
-    # Convertir le base64 en texte
-    text = base64.b64decode(b64_text).decode(errors='replace')
+    """Déchiffrement DESX corrigé."""
+    # Convertir le base64 en bytes
+    encrypted_bytes = base64.b64decode(b64_text)
     
-    # XOR avec la troisième clé
-    post_xor = ''.join(chr(ord(text[i]) ^ ord(key_post[i % len(key_post)])) for i in range(len(text)))
+    # Étendre key_post à la longueur des bytes chiffrés
+    extended_key_post = (key_post * (len(encrypted_bytes) // len(key_post) + 1))[:len(encrypted_bytes)]
+    
+    # XOR avec la troisième clé (annuler le post-blanchiment)
+    post_xor = bytes(encrypted_bytes[i] ^ ord(extended_key_post[i % len(key_post)]) for i in range(len(encrypted_bytes)))
     
     # Convertir en base64 pour DES
-    post_xor_b64 = base64.b64encode(post_xor.encode()).decode()
+    post_xor_b64 = base64.b64encode(post_xor).decode()
     
     # Déchiffrer avec DES
     des_result = des_decrypt(post_xor_b64, key)
     
-    # XOR avec la première clé
-    pre_xor = ''.join(chr(ord(des_result[i]) ^ ord(key_pre[i % len(key_pre)])) for i in range(len(des_result)))
+    # Étendre key_pre à la longueur du résultat DES
+    extended_key_pre = (key_pre * (len(des_result) // len(key_pre) + 1))[:len(des_result)]
+    
+    # XOR avec la première clé (annuler le pré-blanchiment)
+    pre_xor = ''.join(chr(ord(des_result[i]) ^ ord(extended_key_pre[i])) for i in range(len(des_result)))
     
     return pre_xor
+
+# Version alternative plus robuste qui évite les problèmes d'encodage
+def desx_encrypt_robust(text: str, key: str, key_pre: str, key_post: str) -> str:
+    """Chiffrement DESX robuste."""
+    # Convertir tout en bytes dès le début
+    text_bytes = text.encode('utf-8')
+    key_pre_bytes = key_pre.encode('utf-8')
+    key_post_bytes = key_post.encode('utf-8')
+    
+    # Pré-blanchiment : XOR avec key_pre
+    pre_xor = bytes(text_bytes[i] ^ key_pre_bytes[i % len(key_pre_bytes)] for i in range(len(text_bytes)))
+    
+    # Chiffrer avec DES
+    # Convertir pre_xor en string pour la fonction DES existante
+    pre_xor_str = pre_xor.decode('latin-1')  # latin-1 préserve tous les bytes
+    des_result = des_encrypt(pre_xor_str, key)
+    
+    # Convertir le résultat DES de base64 vers bytes
+    des_bytes = base64.b64decode(des_result)
+    
+    # Post-blanchiment : XOR avec key_post
+    post_xor = bytes(des_bytes[i] ^ key_post_bytes[i % len(key_post_bytes)] for i in range(len(des_bytes)))
+    
+    # Retourner en base64
+    return base64.b64encode(post_xor).decode()
+
+def desx_decrypt_robust(b64_text: str, key: str, key_pre: str, key_post: str) -> str:
+    """Déchiffrement DESX robuste."""
+    # Convertir les clés en bytes
+    key_pre_bytes = key_pre.encode('utf-8')
+    key_post_bytes = key_post.encode('utf-8')
+    
+    # Décoder de base64
+    encrypted_bytes = base64.b64decode(b64_text)
+    
+    # Annuler le post-blanchiment
+    post_unxor = bytes(encrypted_bytes[i] ^ key_post_bytes[i % len(key_post_bytes)] for i in range(len(encrypted_bytes)))
+    
+    # Convertir en base64 pour DES
+    post_unxor_b64 = base64.b64encode(post_unxor).decode()
+    
+    # Déchiffrer avec DES
+    des_result = des_decrypt(post_unxor_b64, key)
+    
+    # Convertir le résultat DES en bytes
+    des_bytes = des_result.encode('latin-1')
+    
+    # Annuler le pré-blanchiment
+    pre_unxor = bytes(des_bytes[i] ^ key_pre_bytes[i % len(key_pre_bytes)] for i in range(len(des_bytes)))
+    
+    # Convertir en string
+    return pre_unxor.decode('utf-8')
 
 # ======== INTERFACE UTILISATEUR ========
 def print_banner():
@@ -1092,10 +1155,10 @@ def main():
             elif method == 11:  # DESX
                 key, key_pre, key_post = get_desx_keys()
                 if is_encrypt:
-                    result = desx_encrypt(text, key, key_pre, key_post)
+                    result = desx_encrypt_robust(text, key, key_pre, key_post)
                 else:
-                    result = desx_decrypt(text, key, key_pre, key_post)
-            
+                    result = desx_decrypt_robust(text, key, key_pre, key_post)
+
             print("\nRésultat:")
             print(result)
             

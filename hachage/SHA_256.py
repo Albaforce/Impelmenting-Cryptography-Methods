@@ -84,6 +84,24 @@ def sha256(message: bytes) -> str:
     # Produce final hash
     return ''.join(f'{x:08x}' for x in h)
 
+def SHA256(data):
+    """Wrapper to accept str or bytes and return SHA-256 hex string."""
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return sha256(data)
+
+
+
+try:
+    from hachage.SHA_256 import SHA256
+except ImportError:
+    SHA256 = None
+
+try:
+    from hachage.RIPEMD_160 import RIPEMD160
+except ImportError:
+    RIPEMD160 = None
+
 # Example usage
 if __name__ == "__main__":
     message = b"hello world"

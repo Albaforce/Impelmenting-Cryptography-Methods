@@ -6,7 +6,7 @@ import os
 from typing import Tuple, Union
 
 from Crypto.PublicKey import RSA
-from Crypto.Signature import pss
+from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 from Crypto.Random import get_random_bytes
 
@@ -57,13 +57,8 @@ def sign_message(private_key: RsaKey, message: bytes) -> bytes:
     # Hash the message using SHA-256
     h = SHA256.new(message)
 
-    # Create a PSS signer object
-    # PSS (Probabilistic Signature Scheme) is recommended for new applications
-    # over the older PKCS#1 v1.5 padding.
-    signer = pss.new(private_key)
-
-    # Sign the hash
-    signature = signer.sign(h)
+    # Sign the hash using PKCS#1 v1.5
+    signature = pkcs1_15.new(private_key).sign(h)
     return signature
 
 def verify_signature(public_key: RsaKey, message: bytes, signature: bytes) -> bool:
@@ -91,12 +86,9 @@ def verify_signature(public_key: RsaKey, message: bytes, signature: bytes) -> bo
     # Hash the message using SHA-256 (must use the same hash as signing)
     h = SHA256.new(message)
 
-    # Create a PSS verifier object
-    verifier = pss.new(public_key)
-
-    # Verify the signature
+    # Verify the signature using PKCS#1 v1.5
     try:
-        verifier.verify(h, signature)
+        pkcs1_15.new(public_key).verify(h, signature)
         return True  # Signature is valid
     except (ValueError, TypeError):
         # ValueError is raised by PyCryptodome if verification fails
@@ -148,6 +140,45 @@ def run_rsa_example():
 
     except Exception as e:
         print(f"\nAn error occurred during the RSA example: {e}")
+
+from Crypto.PublicKey import RSA
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
+
+class RSASignature:
+    def __init__(self, key):
+        """Initialize with (n,d) for signing or (n,e) for verification"""
+        self.key = key
+    
+    def sign(self, message):
+        """Sign a message using RSA private key"""
+        if isinstance(message, str):
+            message = message.encode('utf-8')
+        
+        n, d = self.key
+        key = RSA.construct((n, d))
+        h = SHA256.new(message)
+        
+        try:
+            signature = pkcs1_15.new(key).sign(h)
+            return signature
+        except Exception as e:
+            raise ValueError(f"Signing failed: {e}")
+    
+    def verify(self, message, signature):
+        """Verify a signature using RSA public key"""
+        if isinstance(message, str):
+            message = message.encode('utf-8')
+        
+        n, e = self.key
+        key = RSA.construct((n, e))
+        h = SHA256.new(message)
+        
+        try:
+            pkcs1_15.new(key).verify(h, signature)
+            return True
+        except (ValueError, TypeError):
+            return False
 
 if __name__ == '__main__':
     # This block allows running the example directly

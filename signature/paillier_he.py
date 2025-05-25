@@ -9,11 +9,9 @@ Uses PyCryptodome for large number arithmetic and prime generation.
 import secrets
 import math
 from typing import Tuple, NamedTuple
-
-from Crypto.Util import number
+from Crypto.Util.number import getPrime, getRandomRange
 
 # --- Helper Functions ---
-
 def gcd(a: int, b: int) -> int:
     """Computes the greatest common divisor of a and b."""
     while b:
@@ -22,271 +20,123 @@ def gcd(a: int, b: int) -> int:
 
 def lcm(a: int, b: int) -> int:
     """Computes the least common multiple of a and b."""
-    # Ensure integer division
-    return abs(a * b) // gcd(a, b) if a != 0 and b != 0 else 0
+    return abs(a * b) // gcd(a, b)
 
 def L(u: int, n: int) -> int:
-    """Defines the L function for Paillier: L(u) = (u - 1) // n."""
-    # Ensure integer division
+    """L(u) = (u-1)/n"""
     return (u - 1) // n
 
-# --- Paillier Key Structures ---
-
+# --- Key Structures ---
 class PaillierPublicKey(NamedTuple):
-    n: int      # Modulus n = p * q
-    n_sq: int   # n squared (n*n), used frequently in calculations
-    g: int      # Generator, often n + 1
+    n: int  # n = p * q
+    g: int  # generator (usually n + 1)
+    n_sq: int  # n² (precomputed)
 
 class PaillierPrivateKey(NamedTuple):
-    lambda_val: int # Carmichael function lambda(n) = lcm(p-1, q-1)
-    mu: int         # mu = (L(g^lambda mod n^2))^-1 mod n
+    p: int  # first prime
+    q: int  # second prime
+    lambda_val: int  # lcm(p-1, q-1)
+    mu: int  # modular multiplicative inverse
 
-# --- Paillier Core Functions ---
+class PaillierHE:
+    def __init__(self, public_key: PaillierPublicKey = None, private_key: PaillierPrivateKey = None):
+        self.public_key = public_key
+        self.private_key = private_key
 
-def generate_paillier_keys(key_size: int = 2048) -> Tuple[PaillierPublicKey, PaillierPrivateKey]:
-    """Generates Paillier public and private keys.
+    @staticmethod
+    def generate_keypair(bits: int = 1024) -> Tuple[PaillierPublicKey, PaillierPrivateKey]:
+        """Generate a new Paillier keypair."""
+        # Generate two large prime numbers
+        p = getPrime(bits // 2)
+        q = getPrime(bits // 2)
+        
+        n = p * q
+        n_sq = n * n
+        
+        # Calculate lambda (lcm of p-1 and q-1)
+        lambda_val = lcm(p - 1, q - 1)
+        
+        # Generate generator g
+        g = n + 1
+        
+        # Calculate mu (modular multiplicative inverse)
+        mu = pow(lambda_val, -1, n)
+        
+        public_key = PaillierPublicKey(n=n, g=g, n_sq=n_sq)
+        private_key = PaillierPrivateKey(p=p, q=q, lambda_val=lambda_val, mu=mu)
+        
+        return public_key, private_key
 
-    Args:
-        key_size: The desired bit length for the modulus n. The primes p and q
-                  will each be approximately key_size / 2 bits.
-                  Recommended >= 2048 for security.
+    def encrypt(self, plaintext: int) -> int:
+        """Encrypt a message using public key."""
+        if self.public_key is None:
+            raise ValueError("Public key is required for encryption")
+        
+        if not 0 <= plaintext < self.public_key.n:
+            raise ValueError(f"Plaintext must be in range [0, {self.public_key.n})")
+        
+        # Generate random r
+        r = getRandomRange(1, self.public_key.n)
+        
+        # c = g^m * r^n mod n^2
+        c = (pow(self.public_key.g, plaintext, self.public_key.n_sq) * 
+             pow(r, self.public_key.n, self.public_key.n_sq)) % self.public_key.n_sq
+        
+        return c
 
-    Returns:
-        A tuple containing the PaillierPublicKey and PaillierPrivateKey.
+    def decrypt(self, ciphertext: int) -> int:
+        """Decrypt a message using private key."""
+        if self.private_key is None or self.public_key is None:
+            raise ValueError("Both public and private keys are required for decryption")
+        
+        if not 0 <= ciphertext < self.public_key.n_sq:
+            raise ValueError(f"Ciphertext must be in range [0, {self.public_key.n_sq})")
+        
+        # m = L(c^lambda mod n^2) * mu mod n
+        x = pow(ciphertext, self.private_key.lambda_val, self.public_key.n_sq)
+        plaintext = (L(x, self.public_key.n) * self.private_key.mu) % self.public_key.n
+        
+        return plaintext
 
-    Raises:
-        ValueError: If key_size is too small.
-    """
-    if key_size < 1024:
-        raise ValueError("Key size should be at least 1024 bits, 2048 recommended.")
+    @staticmethod
+    def add_encrypted(c1: int, c2: int, public_key: PaillierPublicKey) -> int:
+        """Add two encrypted values homomorphically."""
+        return (c1 * c2) % public_key.n_sq
 
-    # 1. Generate two large distinct primes p and q of roughly key_size/2 bits.
-    #    Ensure gcd(pq, (p-1)(q-1)) = 1. This is automatically satisfied if p, q are distinct primes.
-    print(f"Generating two primes for {key_size}-bit modulus...")
-    p = number.getPrime(key_size // 2, randfunc=secrets.token_bytes)
-    while True:
-        q = number.getPrime(key_size // 2, randfunc=secrets.token_bytes)
-        if p != q:
-            break
-    print(f"Generated primes p ({p.bit_length()} bits) and q ({q.bit_length()} bits).")
+    @staticmethod
+    def multiply_constant(c: int, k: int, public_key: PaillierPublicKey) -> int:
+        """Multiply an encrypted value by a constant k."""
+        return pow(c, k, public_key.n_sq)
 
-    # 2. Compute n = p * q and n_sq = n * n.
-    n = p * q
-    n_sq = n * n
-    print(f"Modulus n = {n} ({n.bit_length()} bits)")
-
-    # 3. Compute lambda(n) = lcm(p-1, q-1).
-    #    lambda is the Carmichael function.
-    lambda_val = lcm(p - 1, q - 1)
-
-    # 4. Select generator g.
-    #    A common choice is g = n + 1. This g always works.
-    #    Check if g is of order n modulo n^2. We need L(g^lambda mod n^2) to be invertible mod n.
-    g = n + 1
-
-    # 5. Compute mu = (L(g^lambda mod n^2))^-1 mod n.
-    #    First, calculate g^lambda mod n^2.
-    g_pow_lambda = pow(g, lambda_val, n_sq)
-    #    Then, apply the L function.
-    l_val = L(g_pow_lambda, n)
-    #    Finally, compute the modular inverse.
-    try:
-        mu = number.inverse(l_val, n)
-    except ValueError:
-        # This should not happen if p, q are distinct primes and g = n+1
-        raise RuntimeError("Could not compute modular inverse mu. Check prime generation.")
-
-    public_key = PaillierPublicKey(n=n, n_sq=n_sq, g=g)
-    private_key = PaillierPrivateKey(lambda_val=lambda_val, mu=mu)
-
-    return public_key, private_key
-
-def encrypt_paillier(public_key: PaillierPublicKey, plaintext: int) -> int:
-    """Encrypts a plaintext integer using the Paillier public key.
-
-    Args:
-        public_key: The PaillierPublicKey object.
-        plaintext: The integer message to encrypt. Must be 0 <= plaintext < n.
-
-    Returns:
-        The ciphertext integer.
-
-    Raises:
-        ValueError: If plaintext is out of range [0, n-1].
-    """
-    n, n_sq, g = public_key.n, public_key.n_sq, public_key.g
-
-    if not (0 <= plaintext < n):
-        raise ValueError(f"Plaintext {plaintext} out of range [0, {n-1}].")
-
-    # 1. Choose a random integer r such that 0 < r < n and gcd(r, n) = 1.
-    while True:
-        r = number.getRandomRange(1, n, randfunc=secrets.token_bytes)
-        if gcd(r, n) == 1:
-            break
-
-    # 2. Compute ciphertext c = g^plaintext * r^n mod n^2.
-    #    Calculate g^plaintext mod n^2
-    g_pow_m = pow(g, plaintext, n_sq)
-    #    Calculate r^n mod n^2
-    r_pow_n = pow(r, n, n_sq)
-    #    Combine them
-    ciphertext = (g_pow_m * r_pow_n) % n_sq
-
-    return ciphertext
-
-def decrypt_paillier(private_key: PaillierPrivateKey, public_key: PaillierPublicKey, ciphertext: int) -> int:
-    """Decrypts a ciphertext integer using the Paillier private key.
-
-    Args:
-        private_key: The PaillierPrivateKey object.
-        public_key: The PaillierPublicKey object (needed for n and n_sq).
-        ciphertext: The integer ciphertext to decrypt. Must be 0 <= ciphertext < n^2.
-
-    Returns:
-        The decrypted plaintext integer.
-
-    Raises:
-        ValueError: If ciphertext is out of range [0, n^2 - 1].
-    """
-    lambda_val, mu = private_key.lambda_val, private_key.mu
-    n, n_sq = public_key.n, public_key.n_sq
-
-    if not (0 <= ciphertext < n_sq):
-        raise ValueError(f"Ciphertext {ciphertext} out of range [0, {n_sq - 1}].")
-
-    # 1. Compute c^lambda mod n^2.
-    c_pow_lambda = pow(ciphertext, lambda_val, n_sq)
-
-    # 2. Apply the L function.
-    l_val = L(c_pow_lambda, n)
-
-    # 3. Compute plaintext m = L(c^lambda mod n^2) * mu mod n.
-    plaintext = (l_val * mu) % n
-
-    return plaintext
-
-# --- Homomorphic Operations ---
-
-def homomorphic_add(public_key: PaillierPublicKey, c1: int, c2: int) -> int:
-    """Performs homomorphic addition of two ciphertexts.
-    If c1 = Enc(m1) and c2 = Enc(m2), returns Enc(m1 + m2).
-
-    Args:
-        public_key: The PaillierPublicKey object.
-        c1: The first ciphertext.
-        c2: The second ciphertext.
-
-    Returns:
-        The resulting ciphertext Enc(m1 + m2).
-    """
-    n_sq = public_key.n_sq
-    # The sum ciphertext is simply the product of the input ciphertexts modulo n^2.
-    c_sum = (c1 * c2) % n_sq
-    return c_sum
-
-def homomorphic_multiply_const(public_key: PaillierPublicKey, c: int, k: int) -> int:
-    """Performs homomorphic multiplication of a ciphertext by a plaintext constant.
-    If c = Enc(m), returns Enc(k * m).
-
-    Args:
-        public_key: The PaillierPublicKey object.
-        c: The ciphertext Enc(m).
-        k: The plaintext constant integer. Must be 0 <= k < n.
-
-    Returns:
-        The resulting ciphertext Enc(k * m).
-
-    Raises:
-        ValueError: If constant k is out of range [0, n-1].
-    """
-    n, n_sq = public_key.n, public_key.n_sq
-    if not (0 <= k < n):
-        # Technically, k can be larger, but the result is mod n.
-        # We restrict it here for clarity, as k often represents another value.
-        raise ValueError(f"Constant k={k} out of range [0, {n-1}].")
-
-    # The resulting ciphertext is c^k mod n^2.
-    c_prod = pow(c, k, n_sq)
-    return c_prod
-
-# --- Example Usage ---
 def run_paillier_example():
-    """Demonstrates the Paillier encryption, decryption, and homomorphic properties."""
-    print("\n--- Paillier Homomorphic Encryption Example ---")
+    """Example usage of Paillier homomorphic encryption."""
+    # Generate keys
+    phe = PaillierHE()
+    public_key, private_key = phe.generate_keypair(1024)
+    phe.public_key = public_key
+    phe.private_key = private_key
 
-    try:
-        # 1. Key Generation (using smaller key size for speed in example)
-        key_size = 1024 # Use 1024 for example speed, recommend 2048+ for real use
-        print(f"Generating Paillier keys ({key_size} bits)...")
-        public_key, private_key = generate_paillier_keys(key_size=key_size)
-        print(f"Public Key (n, g): ({public_key.n}, {public_key.g})")
-        # print(f"Private Key (lambda, mu): ({private_key.lambda_val}, {private_key.mu})") # Keep private key secret
+    # Example values
+    m1 = 15
+    m2 = 20
 
-        # 2. Plaintexts
-        m1 = 12345
-        m2 = 67890
-        k = 5 # Constant for multiplication
-        print(f"\nPlaintext 1 (m1): {m1}")
-        print(f"Plaintext 2 (m2): {m2}")
-        print(f"Constant (k): {k}")
+    # Encrypt
+    c1 = phe.encrypt(m1)
+    c2 = phe.encrypt(m2)
 
-        # Check if plaintexts are within range
-        if m1 >= public_key.n or m2 >= public_key.n:
-            print("Error: Plaintexts are too large for the generated key size.")
-            return
+    # Homomorphic addition
+    c_sum = PaillierHE.add_encrypted(c1, c2, public_key)
+    
+    # Decrypt
+    decrypted_sum = phe.decrypt(c_sum)
 
-        # 3. Encryption
-        print("\nEncrypting m1 and m2...")
-        c1 = encrypt_paillier(public_key, m1)
-        c2 = encrypt_paillier(public_key, m2)
-        print(f"Ciphertext 1 (c1): {c1}")
-        print(f"Ciphertext 2 (c2): {c2}")
+    print(f"m1 = {m1}")
+    print(f"m2 = {m2}")
+    print(f"Decrypted sum = {decrypted_sum}")
+    print(f"Actual sum = {m1 + m2}")
+    
+    return decrypted_sum == m1 + m2
 
-        # 4. Decryption (Verification)
-        print("\nDecrypting c1 and c2 to verify...")
-        decrypted_m1 = decrypt_paillier(private_key, public_key, c1)
-        decrypted_m2 = decrypt_paillier(private_key, public_key, c2)
-        print(f"Decrypted c1: {decrypted_m1}")
-        print(f"Decrypted c2: {decrypted_m2}")
-        assert decrypted_m1 == m1
-        assert decrypted_m2 == m2
-
-        # 5. Homomorphic Addition
-        print("\nPerforming homomorphic addition (c1 * c2 mod n^2)...")
-        c_sum = homomorphic_add(public_key, c1, c2)
-        print(f"Resulting Ciphertext (c_sum): {c_sum}")
-
-        # Decrypt the sum
-        decrypted_sum = decrypt_paillier(private_key, public_key, c_sum)
-        expected_sum = (m1 + m2) % public_key.n # Addition is modulo n
-        print(f"Decrypted Sum: {decrypted_sum}")
-        print(f"Expected Sum (m1 + m2 mod n): {expected_sum}")
-        assert decrypted_sum == expected_sum
-
-        # 6. Homomorphic Multiplication by Constant
-        print(f"\nPerforming homomorphic multiplication (c1^k mod n^2) with k={k}...")
-        c_prod = homomorphic_multiply_const(public_key, c1, k)
-        print(f"Resulting Ciphertext (c_prod): {c_prod}")
-
-        # Decrypt the product
-        decrypted_prod = decrypt_paillier(private_key, public_key, c_prod)
-        expected_prod = (m1 * k) % public_key.n # Multiplication is modulo n
-        print(f"Decrypted Product: {decrypted_prod}")
-        print(f"Expected Product (m1 * k mod n): {expected_prod}")
-        assert decrypted_prod == expected_prod
-
-        print("\nPaillier example completed successfully.")
-        print("\nNote: Paillier is partially homomorphic (supports addition and multiplication by constant), not fully homomorphic.")
-        print("It is vulnerable to chosen-plaintext attacks if used naively.")
-        print("Real-world applications often require more complex protocols built upon it.")
-
-    except Exception as e:
-        print(f"\nAn error occurred during the Paillier example: {e}")
-        import traceback
-        traceback.print_exc()
-
-if __name__ == \'__main__\':
-    # This block allows running the example directly
+if __name__ == "__main__":
     run_paillier_example()
 
