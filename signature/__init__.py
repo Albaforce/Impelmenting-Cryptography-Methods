@@ -13,14 +13,10 @@ This package provides implementations of various cryptographic algorithms:
 # Import key functions/classes from each module to make them accessible
 # directly from the crypto_lib package.
 
-from .rsa_signature import (
-    generate_rsa_keys,
-    sign_message as sign_message_rsa,
-    verify_signature as verify_signature_rsa,
-    run_rsa_example
-)
+# NEW (will work)
+from .rsa_signature import RSASignature
 
-from .elgamal_signature import ElGamalSignature
+#from .elgamal_signature import ElGamalSignature
 
 from .dsa import (
     generate_dsa_keys,
